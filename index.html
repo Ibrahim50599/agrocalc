@@ -1,0 +1,1169 @@
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foguete da Probabilidade - Aposta Dupla</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #e0e6f0;
+            overflow-x: hidden;
+        }
+
+        .rocket-canvas {
+            border: 1px solid #2d3748;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background-image: radial-gradient(1px 1px at 20% 30%, #eee, rgba(0,0,0,0)),
+                              radial-gradient(1px 1px at 70% 80%, #fff, rgba(0,0,0,0)),
+                              radial-gradient(1px 1px at 50% 10%, #ddd, rgba(0,0,0,0));
+            background-repeat: repeat;
+            background-size: 250px 250px;
+        }
+
+        .btn-base {
+            @apply text-white font-semibold py-3 px-4 rounded-lg transition transform duration-200 shadow-lg w-full;
+            background-image: linear-gradient(145deg, var(--tw-gradient-from), var(--tw-gradient-to));
+        }
+
+        .btn-bet {
+            --tw-gradient-from: #10b981;
+            --tw-gradient-to: #059669;
+            &:hover:not(:disabled) { @apply scale-105 shadow-xl; }
+        }
+
+        .btn-cashout {
+            --tw-gradient-from: #60a5fa;
+            --tw-gradient-to: #3b82f6;
+            @apply text-gray-900;
+            &:hover:not(:disabled) { @apply scale-105 shadow-xl; }
+        }
+
+        .btn-disabled, .btn-cashed-out {
+            @apply opacity-70 cursor-not-allowed shadow-inner;
+            background-image: linear-gradient(145deg, #374151, #1f2937);
+            color: #9ca3af;
+        }
+
+        .multiplier-text {
+            transition: all 0.1s ease-out;
+            text-shadow: 0 0 15px rgba(16, 185, 129, 0.7);
+        }
+
+        .multiplier-text.crashed {
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.9);
+            animation: pulse-red 0.8s infinite alternate;
+        }
+
+        @keyframes pulse-red {
+            from { text-shadow: 0 0 10px rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.7); }
+            to { text-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 1); }
+        }
+
+        input[type="number"] {
+            @apply bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-150;
+            padding: 0.75rem 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen p-4 flex flex-col items-center bg-[#0d1117]">
+    <header class="text-center mb-6 w-full max-w-4xl">
+        <h1 class="text-4xl font-extrabold text-[#93c5fd]">
+            <span class="mr-3 text-5xl">🚀</span>
+            Propulsor Duplo
+        </h1>
+        <p class="text-sm text-gray-500 mt-2">Coloque duas apostas independentes em cada voo.</p>
+    </header>
+
+    <!-- Painel de Saldo -->
+    <div class="bg-gray-800 p-4 rounded-xl shadow-lg w-full max-w-lg mb-6 border border-gray-700">
+        <div class="flex justify-between items-center text-xl font-semibold mb-1">
+            <span>Créditos de Combustível:</span>
+            <span id="balanceDisplay" class="text-yellow-400 font-mono">Carregando...</span>
+        </div>
+        <p class="text-xs text-gray-600 truncate">
+            Operador ID: <span id="userIdDisplay" class="font-mono text-gray-500">...</span>
+        </p>
+    </div>
+
+    <!-- Área Principal do Jogo (Canvas e Multiplicador) -->
+    <div class="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Coluna 1: Histórico e Apostas de Outros -->
+        <div class="space-y-6">
+            <div class="bg-gray-900 p-4 rounded-xl shadow-lg border border-gray-700">
+                <h3 class="text-sm font-semibold mb-3 text-gray-400">Registros de Voo (Últimos 10)</h3>
+                <div id="historyContainer" class="flex flex-wrap gap-2 p-3 bg-gray-800 rounded-lg shadow-inner min-h-[50px]">
+                    <span class="text-gray-500 italic text-sm">Nenhum registro disponível.</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 p-4 rounded-xl shadow-lg border border-gray-700">
+                <h3 class="text-sm font-semibold mb-3 text-gray-400 flex justify-between">
+                    Operadores Ativos: <span id="playerCount" class="font-bold text-gray-300">0</span>
+                </h3>
+                <div id="betsContainer" class="bg-gray-800 p-3 rounded-lg shadow-inner max-h-56 overflow-y-auto">
+                    <p id="noBetsMessage" class="text-gray-500 italic text-sm">Nenhuma aposta colocada ainda.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna 2: Canvas e Multiplicador -->
+        <div class="lg:col-span-1 flex flex-col items-center">
+            <div class="text-center p-4 bg-gray-900 rounded-2xl shadow-inner w-full mb-4 border border-gray-700">
+                <h2 id="multiplierDisplay" class="text-8xl font-extrabold text-[#34d399] multiplier-text">1.00x</h2>
+                <p id="infoText" class="text-md text-gray-400 mt-2">Aguardando instruções para o próximo lançamento.</p>
+                <div id="statusMessage" class="text-center text-sm mt-2 h-5 text-gray-400"></div>
+            </div>
+
+            <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl relative">
+                <div class="stars z-10"></div>
+                <canvas id="rocketCanvas" class="rocket-canvas relative z-20 w-full h-full"></canvas>
+            </div>
+        </div>
+
+        <!-- Coluna 3: Controles de Aposta Dupla -->
+        <div class="lg:col-span-1 flex flex-col space-y-4">
+            <h3 class="text-lg font-bold text-center text-gray-300">Controles de Aposta</h3>
+
+            <!-- CONTROLE DE APOSTA 1 -->
+            <div class="bg-gray-900 p-4 rounded-xl shadow-2xl border border-gray-700">
+                <h4 class="text-xl font-bold text-blue-400 mb-3">APOSTA 1</h4>
+                <div class="flex space-x-2 mb-3">
+                    <input type="number" id="betInput1" value="10" min="1" class="flex-grow text-lg" placeholder="Valor da Aposta">
+                    <button id="betBtn1" class="btn-base btn-bet w-auto px-6" disabled>APOSTAR</button>
+                </div>
+                <button id="cashOutBtn1" data-slot="1" disabled class="btn-base btn-cashout btn-disabled mt-2">
+                    SACAR (0.00 Créditos)
+                </button>
+            </div>
+
+            <!-- CONTROLE DE APOSTA 2 -->
+            <div class="bg-gray-900 p-4 rounded-xl shadow-2xl border border-gray-700">
+                <h4 class="text-xl font-bold text-purple-400 mb-3">APOSTA 2</h4>
+                <div class="flex space-x-2 mb-3">
+                    <input type="number" id="betInput2" value="5" min="1" class="flex-grow text-lg" placeholder="Valor da Aposta">
+                    <button id="betBtn2" class="btn-base btn-bet w-auto px-6" disabled>APOSTAR</button>
+                </div>
+                <button id="cashOutBtn2" data-slot="2" disabled class="btn-base btn-cashout btn-disabled mt-2">
+                    SACAR (0.00 Créditos)
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Variáveis Globais (MANDATÓRIO usar __app_id e __firebase_config)
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // Elementos do DOM
+    const balanceDisplay = document.getElementById('balanceDisplay');
+    const userIdDisplay = document.getElementById('userIdDisplay');
+    const multiplierDisplay = document.getElementById('multiplierDisplay');
+    const infoText = document.getElementById('infoText');
+    const statusMessage = document.getElementById('statusMessage');
+    const historyContainer = document.getElementById('historyContainer');
+    const betsContainer = document.getElementById('betsContainer');
+    const playerCountDisplay = document.getElementById('playerCount');
+    const noBetsMessage = document.getElementById('noBetsMessage');
+
+    // Elementos de Aposta 1
+    const betInput1 = document.getElementById('betInput1');
+    const betBtn1 = document.getElementById('betBtn1');
+    const cashOutBtn1 = document.getElementById('cashOutBtn1');
+
+    // Elementos de Aposta 2
+    const betInput2 = document.getElementById('betInput2');
+    const betBtn2 = document.getElementById('betBtn2');
+    const cashOutBtn2 = document.getElementById('cashOutBtn2');
+
+    // Estado do Jogo (Controla o ciclo de rodada)
+    const ROUND_PHASE = { BETTING: 'BETTING', RUNNING: 'RUNNING', CRASHED: 'CRASHED' };
+    let roundPhase = ROUND_PHASE.BETTING;
+    let crashPoint = 0;
+    let isExploding = false;
+
+    // Estado do Jogador (Aposta Dupla)
+    const PLAYER_STATE = { IDLE: 'IDLE', PLACED: 'PLACED', CASHED_OUT: 'CASHED_OUT' };
+    let userBets = {
+        bet1: { state: PLAYER_STATE.IDLE, amount: 0, cashedOutM: 0, button: betBtn1, cashoutBtn: cashOutBtn1, input: betInput1 },
+        bet2: { state: PLAYER_STATE.IDLE, amount: 0, cashedOutM: 0, button: betBtn2, cashoutBtn: cashOutBtn2, input: betInput2 }
+    };
+
+    // Variáveis de Sincronização
+    let currentRoundId = null;
+    let publicGameState = { currentRoundId: '', phase: ROUND_PHASE.BETTING, crashPoint: 0, flightStartTime: 0, timeToLaunch: 0 };
+    let allCurrentBets = {};
+    let currentMultiplier = 1.00;
+    let isAuthReady = false; // <-- NOVO: Flag de prontidão de autenticação e listeners
+
+    // Variáveis de Animação
+    let startTime = 0;
+    let animationFrameId = null;
+    const historyPoints = [];
+    const roundHistory = [];
+    const MAX_HISTORY_LENGTH = 10;
+    let particles = [];
+
+    // Canvas Setup
+    const canvas = document.getElementById('rocketCanvas');
+    const ctx = canvas.getContext('2d');
+    let W, H;
+
+    // Configurações
+    const EXP_RATE = 0.08;
+    const BETTING_WINDOW_MS = 7000; // 7 segundos de aposta
+    const MAX_VISUAL_M = 12;
+    const MAX_VISUAL_T = 20;
+
+    // Configuração do Foguete (Tamanho ajustado)
+    const ROCKET_SCALE_FACTOR = 0.00060;
+
+    // Firebase
+    let app, db, auth;
+    let userId = null;
+    let userBalance = 1000;
+
+    // --- Funções Auxiliares de UI ---
+
+    const setButtonClasses = (element, ...classes) => {
+        element.className = 'btn-base ' + classes.join(' ');
+    };
+
+    const updateBetButton = (slotKey, state) => {
+        const { button, input } = userBets[slotKey];
+
+        if (state === PLAYER_STATE.IDLE && roundPhase === ROUND_PHASE.BETTING) {
+            button.textContent = 'APOSTAR';
+            setButtonClasses(button, 'btn-bet');
+            button.disabled = false;
+            input.disabled = false;
+        } else if (state === PLAYER_STATE.PLACED) {
+            button.textContent = 'APOSTADO';
+            setButtonClasses(button, 'btn-disabled');
+            button.disabled = true;
+            input.disabled = true;
+        } else if (roundPhase === ROUND_PHASE.RUNNING || roundPhase === ROUND_PHASE.CRASHED) {
+             button.textContent = roundPhase === ROUND_PHASE.RUNNING ? 'VOANDO...' : 'FECHADO';
+             setButtonClasses(button, 'btn-disabled');
+             button.disabled = true;
+             input.disabled = true;
+        } else {
+             // Default case for BETTING phase when not yet placed (should be IDLE)
+             button.textContent = 'APOSTAR';
+             setButtonClasses(button, 'btn-bet');
+             button.disabled = false;
+             input.disabled = false;
+        }
+    };
+
+    const updateCashOutButton = (slotKey, state, multiplier = 1.00) => {
+        const { cashoutBtn, amount } = userBets[slotKey];
+        const calculatedWinnings = amount * multiplier;
+        const winningsDisplay = calculatedWinnings.toFixed(2);
+
+        if (state === PLAYER_STATE.IDLE || roundPhase === ROUND_PHASE.BETTING) {
+            cashoutBtn.textContent = `SACAR (0.00 Créditos)`;
+            setButtonClasses(cashoutBtn, 'btn-cashout', 'btn-disabled');
+            cashoutBtn.disabled = true;
+
+        } else if (state === PLAYER_STATE.PLACED && roundPhase === ROUND_PHASE.RUNNING) {
+            cashoutBtn.textContent = `SACAR (+${winningsDisplay} Créditos)`;
+            setButtonClasses(cashoutBtn, 'btn-cashout');
+            cashoutBtn.disabled = false;
+
+        } else if (state === PLAYER_STATE.CASHED_OUT) {
+            cashoutBtn.textContent = `SACADO (${multiplier.toFixed(2)}x: +${winningsDisplay} Créditos)`;
+            setButtonClasses(cashoutBtn, 'btn-disabled', 'btn-cashed-out');
+            cashoutBtn.disabled = true;
+
+        } else if (roundPhase === ROUND_PHASE.CRASHED) {
+             let text = `PERDEU (${amount.toFixed(2)} Créditos)`;
+             if (state === PLAYER_STATE.CASHED_OUT) {
+                 // Já deveria ter sido atualizado no estado local, mas para o caso de perda:
+                 text = `PERDEU (+0.00 Créditos)`;
+             }
+             cashoutBtn.textContent = text;
+             setButtonClasses(cashoutBtn, 'btn-disabled');
+             cashoutBtn.disabled = true;
+        }
+    };
+
+    // --- Funções de Histórico ---
+
+    const updateRoundHistory = (crashMultiplier) => {
+        roundHistory.unshift(crashMultiplier);
+        if (roundHistory.length > MAX_HISTORY_LENGTH) {
+            roundHistory.pop();
+        }
+        renderHistory();
+    };
+
+    const renderHistory = () => {
+        historyContainer.innerHTML = '';
+
+        if (roundHistory.length === 0) {
+            historyContainer.innerHTML = '<span class="text-gray-500 italic text-sm">Nenhum registro disponível.</span>';
+            return;
+        }
+
+        roundHistory.forEach(crashM => {
+            const resultElement = document.createElement('span');
+            const mFixed = crashM.toFixed(2);
+
+            let color = '';
+            if (crashM < 1.50) {
+                color = 'bg-red-800 text-red-100';
+            } else if (crashM < 3.00) {
+                color = 'bg-green-700 text-green-100';
+            } else if (crashM < 10.00) {
+                color = 'bg-purple-700 text-purple-100 font-bold';
+            } else {
+                color = 'bg-yellow-600 text-yellow-900 font-extrabold';
+            }
+
+            resultElement.className = `px-3 py-1 text-sm rounded-full shadow-md font-medium transition duration-150 ${color}`;
+            resultElement.textContent = `${mFixed}x`;
+            resultElement.title = `Rodada anterior: ${mFixed}x`;
+            historyContainer.appendChild(resultElement);
+        });
+    };
+
+    // --- Funções de Sincronização e Firebase ---
+
+    const getPlayerBalancePath = (uid) => {
+        return `artifacts/${appId}/users/${uid}/gameData/rocket_state`;
+    };
+
+    const getPublicStatePath = () => {
+        return `artifacts/${appId}/public/data/rocket_game_state/current`;
+    };
+
+    const getBetsDocPath = (roundId, uid) => {
+        return `artifacts/${appId}/public/data/rocket_bets/${roundId}/bets/${uid}`;
+    };
+
+    const renderBets = () => {
+        const allPlayers = Object.entries(allCurrentBets);
+
+        betsContainer.innerHTML = '';
+        playerCountDisplay.textContent = allPlayers.length.toString();
+
+        if (allPlayers.length === 0) {
+             noBetsMessage.classList.remove('hidden');
+             betsContainer.appendChild(noBetsMessage);
+             return;
+        }
+        noBetsMessage.classList.add('hidden');
+
+        allPlayers.forEach(([uid, playerBets]) => {
+            const isSelf = uid === userId;
+            const displayName = isSelf ? 'Você' : `Operador ${uid.substring(0, 4)}...`;
+            const colorClass = isSelf ? 'text-yellow-400 font-bold' : 'text-gray-300';
+
+            // Verifica o status de ambas as apostas
+            const bet1 = playerBets.bet1;
+            const bet2 = playerBets.bet2;
+
+            let totalAmount = (bet1?.amount || 0) + (bet2?.amount || 0);
+
+            let statusText = '';
+            let statusColorClass = 'text-gray-500';
+
+            if (roundPhase === ROUND_PHASE.RUNNING || roundPhase === ROUND_PHASE.CRASHED) {
+                const is1Cashed = bet1?.cashedOut || false;
+                const is2Cashed = bet2?.cashedOut || false;
+
+                if (totalAmount === 0) {
+                    statusText = 'Aguardando...';
+                } else if (is1Cashed && is2Cashed) {
+                    statusText = `Sacou em ${bet1.multiplier.toFixed(2)}x, ${bet2.multiplier.toFixed(2)}x`;
+                    statusColorClass = 'text-green-400';
+                } else if (is1Cashed || is2Cashed) {
+                    const m1 = is1Cashed ? bet1.multiplier.toFixed(2) : 'Em voo';
+                    const m2 = is2Cashed ? bet2.multiplier.toFixed(2) : 'Em voo';
+                    statusText = `Sacou: ${m1} | ${m2}`;
+                    statusColorClass = 'text-blue-400';
+                } else if (roundPhase === ROUND_PHASE.RUNNING) {
+                     statusText = 'Em voo';
+                     statusColorClass = 'text-blue-400';
+                } else if (roundPhase === ROUND_PHASE.CRASHED) {
+                     statusText = 'Perdido';
+                     statusColorClass = 'text-red-400';
+                }
+            } else {
+                 statusText = 'Aguardando...';
+            }
+
+            const betElement = document.createElement('div');
+            betElement.className = `flex justify-between items-center text-sm py-2 border-b border-gray-700 last:border-b-0`;
+            betElement.innerHTML = `
+                <span class="${colorClass}">${displayName}</span>
+                <div class="flex items-center">
+                    <span class="font-mono text-white mr-2">${totalAmount.toFixed(2)}</span>
+                    <span class="${statusColorClass} text-xs">${statusText}</span>
+                </div>
+            `;
+            betsContainer.appendChild(betElement);
+        });
+    };
+
+    const initializeFirebase = async () => {
+        try {
+            if (!Object.keys(firebaseConfig).length) {
+                console.error("Firebase config não encontrado. Usando dados locais.");
+                userId = "anonymous-local-id-" + crypto.randomUUID().substring(0, 8);
+                userIdDisplay.textContent = userId;
+                balanceDisplay.textContent = userBalance.toFixed(2) + ' Créditos';
+                isAuthReady = true; // Set flag for local mode
+                startContinuousAnimation();
+                return;
+            }
+
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = userId;
+                    setupPlayerBalanceListener(userId);
+                    setupPublicGameStateListener();
+                    isAuthReady = true; // NOVO: Flag de prontidão
+                } else {
+                    console.error("Falha na autenticação do Firebase.");
+                }
+            });
+
+        } catch (error) {
+            console.error("Erro ao inicializar Firebase:", error);
+            statusMessage.textContent = 'Falha na conexão com o centro de controle.';
+        }
+    };
+
+    const setupPlayerBalanceListener = (uid) => {
+        const userDocRef = doc(db, getPlayerBalancePath(uid));
+
+        onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                userBalance = data.balance || 0;
+                balanceDisplay.textContent = userBalance.toFixed(2) + ' Créditos';
+            } else {
+                userBalance = 1000.00;
+                setDoc(userDocRef, { balance: userBalance, createdAt: new Date().toISOString() });
+                balanceDisplay.textContent = userBalance.toFixed(2) + ' Créditos';
+            }
+            if (!animationFrameId) startContinuousAnimation();
+        }, (error) => {
+            console.error("Erro ao ouvir dados do usuário:", error);
+        });
+    };
+
+    const setupBetsListener = (roundId) => {
+        // Remove listeners from previous round
+        // Note: Firestore listeners are handled automatically by onSnapshot's unsubscribe if scope is managed, but here we only call it when currentRoundId changes.
+
+        const betsCollectionRef = collection(db, `artifacts/${appId}/public/data/rocket_bets/${roundId}/bets`);
+
+        onSnapshot(query(betsCollectionRef), (snapshot) => {
+            const newBets = {};
+            snapshot.forEach(doc => {
+                newBets[doc.id] = doc.data();
+            });
+            allCurrentBets = newBets;
+            renderBets();
+
+            // Atualiza o estado da aposta local com base no que vem do Firestore
+            if (userId && newBets[userId]) {
+                const { bet1, bet2 } = newBets[userId];
+
+                // Slot 1
+                if (bet1) {
+                    userBets.bet1.state = bet1.cashedOut ? PLAYER_STATE.CASHED_OUT : PLAYER_STATE.PLACED;
+                    userBets.bet1.amount = bet1.amount;
+                    userBets.bet1.cashedOutM = bet1.multiplier;
+                } else {
+                    userBets.bet1.state = PLAYER_STATE.IDLE;
+                    userBets.bet1.amount = 0;
+                }
+
+                // Slot 2
+                if (bet2) {
+                    userBets.bet2.state = bet2.cashedOut ? PLAYER_STATE.CASHED_OUT : PLAYER_STATE.PLACED;
+                    userBets.bet2.amount = bet2.amount;
+                    userBets.bet2.cashedOutM = bet2.multiplier;
+                } else {
+                    userBets.bet2.state = PLAYER_STATE.IDLE;
+                    userBets.bet2.amount = 0;
+                }
+            } else {
+                // Se não houver dados no Firestore, garante que o estado local está IDLE
+                userBets.bet1.state = PLAYER_STATE.IDLE;
+                userBets.bet1.amount = 0;
+                userBets.bet2.state = PLAYER_STATE.IDLE;
+                userBets.bet2.amount = 0;
+            }
+
+            // Garante que o estado da UI do botão está atualizado
+            updateBetButton('bet1', userBets.bet1.state);
+            updateCashOutButton('bet1', userBets.bet1.state, userBets.bet1.cashedOutM);
+            updateBetButton('bet2', userBets.bet2.state);
+            updateCashOutButton('bet2', userBets.bet2.state, userBets.bet2.cashedOutM);
+
+        }, (error) => {
+            console.error("Erro ao ouvir coleção de apostas:", error);
+        });
+    }
+
+    const setupPublicGameStateListener = () => {
+        const publicDocRef = doc(db, getPublicStatePath());
+
+        onSnapshot(publicDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const oldPhase = publicGameState.phase;
+                const oldRoundId = publicGameState.currentRoundId;
+
+                publicGameState = data;
+                crashPoint = data.crashPoint;
+
+                if (data.currentRoundId) {
+                    currentRoundId = data.currentRoundId;
+                }
+
+                if (currentRoundId && currentRoundId !== oldRoundId) {
+                    setupBetsListener(currentRoundId); // Nova rodada, novo listener de apostas
+                }
+
+                const newPhase = data.phase;
+
+                if (newPhase === ROUND_PHASE.RUNNING && oldPhase !== ROUND_PHASE.RUNNING) {
+                    // Início da fase de VOO
+                    startTime = data.flightStartTime;
+                    currentMultiplier = 1.00;
+                    historyPoints.length = 0;
+                    isExploding = false;
+                    particles = [];
+                    // Reset UI: o listener de apostas tratará do estado PLACED/IDLE
+
+                } else if (newPhase === ROUND_PHASE.BETTING && oldPhase !== ROUND_PHASE.BETTING) {
+                    // Início da fase de APOSTA
+                    userBets.bet1.input.disabled = false;
+                    userBets.bet2.input.disabled = false;
+
+                    // Reset UI (chamado novamente no listener de apostas, mas útil para reatividade imediata)
+                    updateBetButton('bet1', userBets.bet1.state);
+                    updateCashOutButton('bet1', userBets.bet1.state);
+                    updateBetButton('bet2', userBets.bet2.state);
+                    updateCashOutButton('bet2', userBets.bet2.state);
+
+                } else if (newPhase === ROUND_PHASE.CRASHED && oldPhase !== ROUND_PHASE.CRASHED) {
+                    // OCORREU O COLAPSO
+                    currentMultiplier = data.crashPoint;
+                    // NOVO: Garantir que a lógica de explosão é chamada.
+                    handleRoundCrash();
+                }
+
+                // NOVO: Atualiza a fase local no final do listener
+                roundPhase = newPhase;
+
+                renderBets();
+            } else {
+                if (isAuthReady) { // NOVO: Só tenta iniciar uma rodada se o Auth estiver pronto
+                    startBettingPhase(Date.now(), true);
+                }
+            }
+        }, (error) => {
+            console.error("Erro ao ouvir estado público:", error);
+        });
+    }
+
+    const updateBalanceInFirestore = async (delta) => {
+        if (!db || !userId || !isAuthReady) return; // NOVO: Check de prontidão
+        const userDocRef = doc(db, getPlayerBalancePath(userId));
+        try {
+             await updateDoc(userDocRef, { balance: userBalance + delta });
+        } catch (error) {
+            console.error("Erro ao atualizar o saldo no Firestore:", error);
+            statusMessage.textContent = 'Erro de sincronização de créditos.';
+        }
+    };
+
+    const updatePublicGameState = async (updateData) => {
+        if (!db || !isAuthReady) return; // NOVO: Check de prontidão
+        const publicDocRef = doc(db, getPublicStatePath());
+        try {
+            await setDoc(publicDocRef, updateData, { merge: true });
+        } catch (error) {
+            console.error("Erro ao atualizar o estado público:", error);
+        }
+    };
+
+    // --- Lógica do Ciclo de Rodada ---
+
+    // Função para iniciar ou manter a fase de aposta
+    const startBettingPhase = (timestamp, forceUpdate = false) => {
+
+        // Reset local, independentemente do forceUpdate
+        currentRoundId = Date.now().toString();
+        userBets.bet1.state = PLAYER_STATE.IDLE;
+        userBets.bet2.state = PLAYER_STATE.IDLE;
+        userBets.bet1.amount = 0;
+        userBets.bet2.amount = 0;
+        isExploding = false;
+
+        // As atualizações de UI são agora tratadas pelo listener de estado público
+        infoText.textContent = 'Insira seus créditos e aposte.';
+
+        const timeToLaunch = timestamp + BETTING_WINDOW_MS;
+
+        // Se forceUpdate for verdadeiro, ou se for a primeira vez, atualizamos o DB
+        if (forceUpdate && db && isAuthReady) {
+            updatePublicGameState({
+                currentRoundId: currentRoundId,
+                phase: ROUND_PHASE.BETTING,
+                crashPoint: 0,
+                flightStartTime: 0,
+                timeToLaunch: timeToLaunch,
+            });
+            setupBetsListener(currentRoundId);
+        } else if (!db) {
+             // Caso de fallback local sem Firebase
+             publicGameState = { currentRoundId: currentRoundId, phase: ROUND_PHASE.BETTING, crashPoint: 0, flightStartTime: 0, timeToLaunch: timeToLaunch };
+        }
+    };
+
+    const startRunningPhase = () => {
+        if (roundPhase === ROUND_PHASE.RUNNING) return;
+
+        crashPoint = 1 + generateCrashPoint();
+        currentMultiplier = 1.00;
+        startTime = Date.now();
+        historyPoints.length = 0;
+
+        // Atualiza UI globalmente
+        infoText.textContent = 'Foguete em ascensão...';
+
+        // Dispara o evento de sincronização pública
+        updatePublicGameState({
+            phase: ROUND_PHASE.RUNNING,
+            crashPoint: crashPoint,
+            flightStartTime: startTime
+        });
+    };
+
+    const handleRoundCrash = () => {
+        // NÃO verifica o estado local da fase, pois o listener já validou a transição (oldPhase != newPhase)
+
+        // Calcula a posição final para a explosão
+        const elapsed = (Date.now() - publicGameState.flightStartTime) / 1000;
+        const rocketX = mapTToX(elapsed);
+        const rocketY = mapMToY(currentMultiplier);
+
+        isExploding = true;
+        createExplosion(rocketX, rocketY);
+
+        updateRoundHistory(currentMultiplier);
+
+        multiplierDisplay.classList.add('crashed');
+        infoText.textContent = `FALHA! O colapso ocorreu em ${currentMultiplier.toFixed(2)}x.`;
+        statusMessage.textContent = 'Aguarde o próximo lançamento.';
+
+        // Atualiza botões finais (exibe perda)
+        updateCashOutButton('bet1', userBets.bet1.state, userBets.bet1.cashedOutM);
+        updateCashOutButton('bet2', userBets.bet2.state, userBets.bet2.cashedOutM);
+
+        // Tempo para animação de explosão e reinício do ciclo
+        setTimeout(() => {
+            multiplierDisplay.classList.remove('crashed');
+            // O cliente que detonou o crash ou o primeiro cliente a ver o crash inicia a nova rodada
+            startBettingPhase(Date.now(), true);
+        }, 3000);
+    };
+
+    // --- Ações do Jogador ---
+
+    const placeBet = async (slotId) => {
+        if (!db || !userId || !isAuthReady) { // NOVO: Check de prontidão
+            statusMessage.textContent = 'Aguarde a conexão com o centro de controle.';
+            return;
+        }
+        if (roundPhase !== ROUND_PHASE.BETTING) {
+            statusMessage.textContent = 'Janela de aposta fechada!';
+            return;
+        }
+
+        const slotKey = `bet${slotId}`;
+        const slotData = userBets[slotKey];
+        const betValue = parseFloat(slotData.input.value);
+
+        if (isNaN(betValue) || betValue <= 0 || betValue % 1 !== 0) {
+            statusMessage.textContent = 'Valor de aposta inválido ou não inteiro.';
+            return;
+        }
+
+        if (betValue > userBalance) {
+            statusMessage.textContent = 'Créditos insuficientes!';
+            return;
+        }
+        if (slotData.state !== PLAYER_STATE.IDLE) {
+            statusMessage.textContent = `Aposta ${slotId} já enviada!`;
+            return;
+        }
+
+        try {
+            // 1. Atualiza Saldo no DB (Primeiro, pois é mais seguro em caso de falha de escrita de aposta)
+            await updateBalanceInFirestore(-betValue);
+
+            // 2. Prepara a aposta no formato correto para o Firestore
+            const betDocRef = doc(db, getBetsDocPath(currentRoundId, userId));
+            const betUpdate = {
+                [slotKey]: {
+                    amount: betValue,
+                    cashedOut: false,
+                    multiplier: 1.00,
+                    timestamp: Date.now()
+                }
+            };
+
+            // Use setDoc com merge para garantir que a bet1 não sobrescreva a bet2 (e vice-versa)
+            await setDoc(betDocRef, betUpdate, { merge: true });
+
+            // 3. O listener de apostas atualizará o estado local (slotData.state = PLACED)
+            // Apenas definimos localmente para dar feedback visual imediato
+            slotData.amount = betValue;
+            slotData.state = PLAYER_STATE.PLACED;
+
+            updateBetButton(slotKey, PLAYER_STATE.PLACED);
+            updateCashOutButton(slotKey, PLAYER_STATE.PLACED, 1.00);
+
+            statusMessage.textContent = `Aposta ${slotId} de ${betValue.toFixed(2)} Créditos confirmada.`;
+        } catch (error) {
+            console.error(`Erro ao colocar aposta ${slotId}:`, error);
+            statusMessage.textContent = 'Falha ao registrar aposta. O saldo será recuperado na próxima sincronização.';
+            // Nota: Uma reversão de saldo é complexa e precisa de transações/funções no lado do servidor.
+        }
+    };
+
+    const cashOut = async (slotId) => {
+        const slotKey = `bet${slotId}`;
+        const slotData = userBets[slotKey];
+
+        if (roundPhase !== ROUND_PHASE.RUNNING || slotData.state !== PLAYER_STATE.PLACED) return;
+
+        const winnings = slotData.amount * currentMultiplier;
+
+        try {
+            // 1. Atualiza Saldo no DB
+            await updateBalanceInFirestore(winnings);
+
+            // 2. Atualiza status da aposta no DB
+            const betDocRef = doc(db, getBetsDocPath(currentRoundId, userId));
+            const betUpdate = {
+                [slotKey]: {
+                    amount: slotData.amount,
+                    cashedOut: true,
+                    multiplier: currentMultiplier
+                }
+            };
+            await updateDoc(betDocRef, betUpdate);
+
+            // 3. O listener de apostas atualizará o estado local
+            slotData.state = PLAYER_STATE.CASHED_OUT;
+            slotData.cashedOutM = currentMultiplier;
+
+            // 4. Atualiza UI
+            updateCashOutButton(slotKey, PLAYER_STATE.CASHED_OUT, currentMultiplier);
+            statusMessage.textContent = `✅ Sucesso! Aposta ${slotId} sacou ${winnings.toFixed(2)} Créditos em ${currentMultiplier.toFixed(2)}x.`;
+
+        } catch (error) {
+            console.error(`Erro ao sacar aposta ${slotId}:`, error);
+            statusMessage.textContent = 'Falha ao registrar saque. Tente novamente.';
+        }
+    };
+
+    // --- Loop Principal do Jogo ---
+
+    const generateCrashPoint = () => {
+        const U = Math.random();
+        // Distribuição simples para fins de demonstração
+        return 1 / (1 - U);
+    };
+
+    const startContinuousAnimation = () => {
+        // NOVO: Garantir que a fase de aposta é iniciada se o DB estiver indisponível/vazio
+        if (db) {
+            // O listener irá cuidar de chamar startBettingPhase(..., true) se não houver estado público
+        } else {
+             startBettingPhase(Date.now(), true);
+        }
+
+        animationFrameId = requestAnimationFrame(gameLoop);
+    };
+
+    const gameLoop = (timestamp) => {
+        ctx.clearRect(0, 0, W, H);
+        drawGrid();
+
+        if (roundPhase === ROUND_PHASE.BETTING) {
+            const remaining = publicGameState.timeToLaunch - Date.now();
+            if (remaining <= 0 && publicGameState.timeToLaunch !== 0 && isAuthReady) {
+                // Se o tempo acabar, o primeiro cliente pronto inicia o voo
+                startRunningPhase();
+            } else if (publicGameState.timeToLaunch !== 0) {
+                drawCountdown(remaining / 1000);
+            }
+        }
+
+        if (roundPhase === ROUND_PHASE.RUNNING || roundPhase === ROUND_PHASE.CRASHED) {
+            const currentTime = Date.now();
+            const elapsed = (currentTime - publicGameState.flightStartTime) / 1000;
+            let targetMultiplier = Math.exp(EXP_RATE * elapsed);
+
+            if (publicGameState.crashPoint > 0 && targetMultiplier >= publicGameState.crashPoint) {
+                targetMultiplier = publicGameState.crashPoint;
+            }
+
+            currentMultiplier = targetMultiplier;
+
+            if (roundPhase === ROUND_PHASE.RUNNING && publicGameState.crashPoint > 0 && currentMultiplier >= publicGameState.crashPoint && isAuthReady) {
+                // Este cliente (o primeiro a detetar) dispara a mudança para CRASHED no DB
+                updatePublicGameState({ phase: ROUND_PHASE.CRASHED });
+            }
+
+            const rocketX = mapTToX(elapsed);
+            const rocketY = mapMToY(currentMultiplier);
+
+            if(!isExploding) {
+                if(elapsed < MAX_VISUAL_T && currentMultiplier < MAX_VISUAL_M * 2) {
+                    if(roundPhase === ROUND_PHASE.RUNNING) {
+                        historyPoints.push({ x: rocketX, y: rocketY, m: currentMultiplier });
+                    }
+                }
+            }
+
+            drawTrajectory();
+
+            if (!isExploding) {
+                drawRocket(rocketX, rocketY, elapsed);
+            } else {
+                updateParticles();
+                drawParticles();
+            }
+
+            multiplierDisplay.textContent = `${currentMultiplier.toFixed(2)}x`;
+
+            if (roundPhase === ROUND_PHASE.RUNNING) {
+                multiplierDisplay.classList.remove('crashed');
+                multiplierDisplay.style.color = '#34d399';
+
+                // Atualiza botões de saque em tempo real
+                if (userBets.bet1.state === PLAYER_STATE.PLACED) updateCashOutButton('bet1', PLAYER_STATE.PLACED, currentMultiplier);
+                if (userBets.bet2.state === PLAYER_STATE.PLACED) updateCashOutButton('bet2', PLAYER_STATE.PLACED, currentMultiplier);
+
+                const scaleFactor = 1 + Math.min(elapsed / 10, 0.5) * 0.02;
+                multiplierDisplay.style.transform = `scale(${scaleFactor})`;
+                infoText.textContent = `Foguete em voo.`;
+
+            } else if (roundPhase === ROUND_PHASE.CRASHED) {
+                multiplierDisplay.style.transform = `scale(1.0)`;
+            }
+        }
+
+        animationFrameId = requestAnimationFrame(gameLoop);
+    };
+
+    // --- Funções de Mapeamento e Desenho do Canvas ---
+
+    const mapMToY = (m) => {
+        const MIN_Y = H * 0.15;
+        const MAX_Y = H * 0.85;
+        const normalizedM = Math.min(m, MAX_VISUAL_M);
+        const logM = Math.log(normalizedM + 0.1);
+        const logMaxM = Math.log(MAX_VISUAL_M + 0.1);
+        const progress = logM / logMaxM;
+
+        return MAX_Y - progress * (MAX_Y - MIN_Y);
+    };
+
+    const mapTToX = (t) => {
+        const MIN_X = W * 0.15;
+        const MAX_X = W * 0.85;
+        const normalizedT = Math.min(t, MAX_VISUAL_T);
+        const progress = normalizedT / MAX_VISUAL_T;
+        return MIN_X + progress * (MAX_X - MIN_X);
+    };
+
+    const resizeCanvas = () => {
+        W = canvas.clientWidth;
+        H = canvas.clientHeight;
+        canvas.width = W;
+        canvas.height = H;
+    };
+
+    const drawGrid = () => {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.font = '11px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+
+        // Eixo Y (Multiplicador)
+        const labelsM = [1, 2, 4, 6, 8, 10, 12];
+        for (const m of labelsM) {
+            const y = mapMToY(m);
+            ctx.beginPath();
+            ctx.moveTo(W * 0.15, y);
+            ctx.lineTo(W * 0.85, y);
+            ctx.stroke();
+
+            ctx.textAlign = 'right';
+            ctx.fillText(`${m.toFixed(1)}x`, W * 0.14, y + 4);
+        }
+
+        // Eixo X (Tempo)
+        const labelsT = [0, 5, 10, 15, 20];
+        for (const t of labelsT) {
+            const x = mapTToX(t);
+            ctx.beginPath();
+            ctx.moveTo(x, H * 0.85);
+            ctx.lineTo(x, H * 0.15);
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            if (t >= 0) ctx.fillText(`${t}s`, x, H * 0.9);
+        }
+
+        // Desenha eixos principais mais grossos
+        ctx.strokeStyle = '#4a5568';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.15, H * 0.85);
+        ctx.lineTo(W * 0.85, H * 0.85);
+        ctx.lineTo(W * 0.15, H * 0.85);
+        ctx.lineTo(W * 0.15, H * 0.15);
+        ctx.stroke();
+    };
+
+    const drawTrajectory = () => {
+        ctx.beginPath();
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        ctx.moveTo(mapTToX(0), mapMToY(1));
+
+        for (let i = 0; i < historyPoints.length; i++) {
+            const p = historyPoints[i];
+            ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+
+        // Ponto de crash
+        if (roundPhase === ROUND_PHASE.CRASHED && historyPoints.length > 0) {
+            const lastPoint = historyPoints[historyPoints.length - 1];
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(lastPoint.x, lastPoint.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+
+    const drawRocket = (x, y, elapsed) => {
+        const R_SCALE = W * ROCKET_SCALE_FACTOR;
+        const R_WIDTH = 20 * R_SCALE;
+        const R_HEIGHT = 80 * R_SCALE;
+        const NOSE_HEIGHT = 25 * R_SCALE;
+        const SHAKE_MAGNITUDE = (roundPhase === ROUND_PHASE.RUNNING ? 1 + Math.min(elapsed / 5, 1) * 2 : 0);
+        const shakeX = (Math.random() - 0.5) * SHAKE_MAGNITUDE;
+        const shakeY = (Math.random() - 0.5) * SHAKE_MAGNITUDE * 0.5;
+
+        x += shakeX;
+        y += shakeY;
+
+        const isOutsideBounds = x > W * 0.95 || y < H * 0.05 || y > H * 0.95;
+
+        if (isOutsideBounds) {
+            if(roundPhase === ROUND_PHASE.RUNNING) {
+                 ctx.fillStyle = '#fcd34d';
+                 ctx.font = 'bold 20px Inter';
+                 ctx.textAlign = 'center';
+                 ctx.fillText(`Foguete além da visibilidade (${currentMultiplier.toFixed(2)}x)`, W / 2, H * 0.05);
+            }
+            return;
+        }
+
+        // Chama do Foguete
+        const flameLength = (10 + Math.sin(elapsed * 15) * 5 + elapsed * 3) * R_SCALE * 1.5;
+        const flameBaseWidth = R_WIDTH * 1.2;
+
+        const flameGradient = ctx.createLinearGradient(x, y + R_HEIGHT, x, y + R_HEIGHT + flameLength);
+        flameGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+        flameGradient.addColorStop(0.2, 'rgba(255, 200, 0, 0.7)');
+        flameGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+
+        ctx.fillStyle = flameGradient;
+        ctx.beginPath();
+        ctx.moveTo(x - flameBaseWidth * 0.5 + shakeX, y + R_HEIGHT);
+        ctx.quadraticCurveTo(x + shakeX, y + R_HEIGHT + flameLength, x + flameBaseWidth * 0.5 + shakeX, y + R_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
+
+        // Corpo Principal
+        ctx.fillStyle = '#aab5c4';
+        ctx.fillRect(x - R_WIDTH / 2, y, R_WIDTH, R_HEIGHT);
+
+        // Cone do Nariz
+        ctx.fillStyle = '#ff6347';
+        ctx.beginPath();
+        ctx.moveTo(x - R_WIDTH / 2, y);
+        ctx.lineTo(x + R_WIDTH / 2, y);
+        ctx.lineTo(x, y - NOSE_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
+
+        // Aletas Laterais
+        ctx.fillStyle = '#4a7bb0';
+        // Aleta Esquerda
+        ctx.beginPath();
+        ctx.moveTo(x - R_WIDTH / 2, y + R_HEIGHT * 0.7);
+        ctx.lineTo(x - R_WIDTH, y + R_HEIGHT);
+        ctx.lineTo(x - R_WIDTH / 2, y + R_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
+        // Aleta Direita
+        ctx.beginPath();
+        ctx.moveTo(x + R_WIDTH / 2, y + R_HEIGHT * 0.7);
+        ctx.lineTo(x + R_WIDTH, y + R_HEIGHT);
+        ctx.lineTo(x + R_WIDTH / 2, y + R_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
+    };
+
+    const drawCountdown = (seconds) => {
+        ctx.fillStyle = '#fcd34d';
+        ctx.font = 'bold 50px Inter';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${seconds.toFixed(1)}s`, W / 2, H / 2);
+        infoText.textContent = `Preparação para a ignição...`;
+        multiplierDisplay.classList.remove('crashed');
+        multiplierDisplay.style.color = '#fcd34d';
+        multiplierDisplay.textContent = '0.00x';
+    };
+
+    // --- Efeitos de Partículas para Explosão ---
+    function Particle(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 5 + 2;
+        this.speedX = Math.random() * 8 - 4;
+        this.speedY = Math.random() * 8 - 4;
+        this.color = color;
+        this.alpha = 1;
+        this.gravity = 0.2;
+    }
+
+    Particle.prototype.update = function() {
+        this.speedY += this.gravity;
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.alpha -= 0.02;
+    }
+
+    Particle.prototype.draw = function() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    const createExplosion = (x, y) => {
+        particles = [];
+        const numParticles = 80;
+        const colors = ['#FFD700', '#FFA500', '#FF4500', '#A9A9A9'];
+        for (let i = 0; i < numParticles; i++) {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            particles.push(new Particle(x, y, color));
+        }
+    };
+
+    const updateParticles = () => {
+        for (let i = 0; i < particles.length; i++) {
+            particles[i].update();
+            if (particles[i].alpha <= 0.05) {
+                particles.splice(i, 1);
+                i--;
+            }
+        }
+        if (particles.length === 0) {
+            isExploding = false;
+        }
+    };
+
+    const drawParticles = () => {
+        for (let i = 0; i < particles.length; i++) {
+            particles[i].draw();
+        }
+    };
+
+    // --- Event Listeners e Inicialização ---
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Listeners para Aposta 1
+    betBtn1.addEventListener('click', () => placeBet(1));
+    cashOutBtn1.addEventListener('click', () => cashOut(1));
+
+    // Listeners para Aposta 2
+    betBtn2.addEventListener('click', () => placeBet(2));
+    cashOutBtn2.addEventListener('click', () => cashOut(2));
+
+    window.onload = () => {
+        resizeCanvas();
+        initializeFirebase();
+    };
+
+</script>
+</body>
+</html>
+
